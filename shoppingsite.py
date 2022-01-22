@@ -6,10 +6,11 @@ put melons in a shopping cart.
 Authors: Joel Burton, Christian Fernandez, Meggie Mahnken, Katie Byers.
 """
 
-from flask import Flask, render_template, redirect, flash
+from flask import Flask, render_template, redirect, flash, session, request
 import jinja2
 
 import melons
+import customers
 
 app = Flask(__name__)
 
@@ -60,8 +61,6 @@ def show_melon(melon_id):
 def show_shopping_cart():
     """Display content of shopping cart."""
 
-    # TODO: Display the contents of the shopping cart.
-
     # The logic here will be something like:
     #
     # - get the cart dictionary from the session
@@ -78,7 +77,23 @@ def show_shopping_cart():
     # Make sure your function can also handle the case wherein no cart has
     # been added to the session
 
-    return render_template("cart.html")
+    melons_in_cart = session.get("cart",{})
+
+    melon_list = []
+    total_cost = 0
+
+    for melon_id, qty in melons_in_cart.items():
+        melon_info = melons.get_by_id(melon_id)
+        
+        total_melon_price = melon_info.price * qty
+        total_cost += total_melon_price
+
+        melon_info.qty = qty  
+        melon_info.total_melon_price = total_melon_price
+    
+        melon_list.append(melon_info)
+
+    return render_template("cart.html", cart = melon_list, total_cost = total_cost)
 
 
 @app.route("/add_to_cart/<melon_id>")
@@ -89,8 +104,6 @@ def add_to_cart(melon_id):
     page and display a confirmation message: 'Melon successfully added to
     cart'."""
 
-    # TODO: Finish shopping cart functionality
-
     # The logic here should be something like:
     #
     # - check if a "cart" exists in the session, and create one (an empty
@@ -100,8 +113,12 @@ def add_to_cart(melon_id):
     # - flash a success message
     # - redirect the user to the cart page
 
-    return "Oops! This needs to be implemented!"
-
+    if "cart" not in session:
+        session["cart"] = {}
+    
+    session["cart"][melon_id] = session["cart"].get(melon_id, 0) + 1
+    flash("Success! Added Melon to Cart")
+    return redirect("/cart")
 
 @app.route("/login", methods=["GET"])
 def show_login():
@@ -118,8 +135,6 @@ def process_login():
     dictionary, look up the user, and store them in the session.
     """
 
-    # TODO: Need to implement this!
-
     # The logic here should be something like:
     #
     # - get user-provided name and password from request.form
@@ -132,8 +147,21 @@ def process_login():
     # - if they don't, flash a failure message and redirect back to "/login"
     # - do the same if a Customer with that email doesn't exist
 
-    return "Oops! This needs to be implemented"
+    entered_email = request.form.get('email')
+    entered_password = hash(request.form.get('password'))
+    
+    cust_info = customers.get_by_email(entered_email)
 
+    if not cust_info:
+        flash("No customer with that email found")
+        return redirect("/login")
+    
+    if not cust_info.is_correct_password(entered_password):
+        return redirect("/login")
+    
+    session["logged_in_user"] = cust_info.email
+    flash("Successful login!")
+    return redirect("/melons")
 
 @app.route("/checkout")
 def checkout():
@@ -145,6 +173,13 @@ def checkout():
     flash("Sorry! Checkout will be implemented in a future version.")
     return redirect("/melons")
 
+@app.route("/logout")
+def process_logout():
+    #pop ends the specific session, here closes user login but leaves open melon count in cart
+    #use clear to end all sessions, including clearing melon count in cart
+    session.pop("logged_in_user")
+    flash("Logged out")
+    return redirect("/melons")
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0")
